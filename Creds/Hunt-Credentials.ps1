@@ -80,6 +80,7 @@ function Hunt-Credentials {
         
         while ($matchingFiles.Count -gt 0) {
             
+          #Only create processes up to the max number of processes in the runspace. No point in creating a queue of heavy objects that are not used
             while ($runspaces.Count -lt $MAX_RUNSPACE -and $matchingFiles.Count -gt 0) {           
                 $filePath       = $matchingFiles.Dequeue()             
                 $runspace       = Create-Runspace $scriptblock $filePath $contentSearcher $pool 
@@ -87,6 +88,8 @@ function Hunt-Credentials {
                 $fileCount      += 1
             } 
             
+            #When a runspace completes cycle through the contents and spit out the details to console.
+            #May be worth rewritting to spit this into objects later on for use as a cmdlet
             $finishedJobs = $runspaces | Where-Object {$_.Status.IsCompleted -eq $true}          
 
             foreach ($job in $finishedJobs) {
@@ -102,12 +105,15 @@ function Hunt-Credentials {
                 }
             }    
             
+            #If no finished items are found increase the sleep duration as to not hammer the machine when we reach large files with this main loop
+            #May be a max duration is worth adding, as a runspace that does complete currently cannot trigger a reset of the wait until the duration completed
             if ($finishedJobs.Count -lt 1) {
                 Write-Verbose "Wait period $($waitCount * 100) milliseconds"
                 $waitCount += 1
                 Start-Sleep -Milliseconds ($waitCount * 100) 
             }
             else {    
+                #User feedback on processing
                 $waitCount = 0
                 if ($runspaces.Count -ne 0) {                    
                     Write-Progress -Id 100 -Activity "Parsing files"  -Status "File $fileCount of $totalFiles" -PercentComplete (($fileCount / $totalFiles) * 100)                  
